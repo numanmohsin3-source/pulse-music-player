@@ -1,0 +1,4 @@
+-optimizationpasses 5
+-allowaccessmodification
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keep class com.pulsemusic.player.data.** { *; }

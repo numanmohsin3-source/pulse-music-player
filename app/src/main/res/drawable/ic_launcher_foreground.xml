@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Equalizer bars with neon cyan & magenta accents -->
+    <path
+        android:fillColor="#25F4EE"
+        android:pathData="M28,44h8v24h-8z" />
+    <path
+        android:fillColor="#FE2C55"
+        android:pathData="M40,32h8v44h-8z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,26h8v56h-8z" />
+    <path
+        android:fillColor="#FE2C55"
+        android:pathData="M64,36h8v38h-8z" />
+    <path
+        android:fillColor="#25F4EE"
+        android:pathData="M76,46h8v20h-8z" />
+</vector>
