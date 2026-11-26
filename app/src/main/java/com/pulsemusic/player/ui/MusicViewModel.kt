@@ -2,8 +2,13 @@ package com.pulsemusic.player.ui
 
 import android.app.Application
 import android.content.ComponentName
+import android.database.ContentObserver
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,6 +26,7 @@ import com.pulsemusic.player.dsp.EqPreset
 import com.pulsemusic.player.dsp.EqPreferences
 import com.pulsemusic.player.dsp.EqSettings
 import com.pulsemusic.player.player.MusicService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +66,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
     private var progressJob: Job? = null
+    private var debounceSyncJob: Job? = null
+    private var mediaObserver: ContentObserver? = null
     private var trackLookup: Map<Long, AudioTrack> = emptyMap()
 
     init {
@@ -149,6 +157,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun scanLibrary() {
+        registerMediaObserverIfNeeded()
         _uiState.update { it.copy(isScanning = true) }
         viewModelScope.launch {
             val (tracks, folders) = scanner.scanAllAudio(_uiState.value.includeShortClips)
@@ -166,10 +175,39 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun rescanStorage() {
-        _uiState.update { it.copy(isScanning = true) }
-        scanner.triggerStorageRescan {
+    private fun registerMediaObserverIfNeeded() {
+        if (mediaObserver != null) return
+        val ctx = getApplication<Application>()
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                super.onChange(selfChange, uri)
+                scheduleAutoSync()
+            }
+        }
+        runCatching {
+            ctx.contentResolver.registerContentObserver(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+            mediaObserver = observer
+        }
+    }
+
+    private fun scheduleAutoSync() {
+        debounceSyncJob?.cancel()
+        debounceSyncJob = viewModelScope.launch {
+            delay(1000L)
             scanLibrary()
+        }
+    }
+
+    fun rescanStorage(onlyRecent: Boolean = false) {
+        _uiState.update { it.copy(isScanning = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            scanner.triggerStorageRescan(onlyRecentHours = if (onlyRecent) 24 else null) {
+                scanLibrary()
+            }
         }
     }
 
@@ -316,6 +354,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         progressJob?.cancel()
+        debounceSyncJob?.cancel()
+        mediaObserver?.let { obs ->
+            runCatching { getApplication<Application>().contentResolver.unregisterContentObserver(obs) }
+        }
         controllerFuture?.let { MediaController.releaseFuture(it) }
         super.onCleared()
     }

@@ -15,6 +15,7 @@ import android.util.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class MusicScanner(private val context: Context) {
 
@@ -172,15 +173,40 @@ class MusicScanner(private val context: Context) {
         }
     }
 
-    fun triggerStorageRescan(onDone: () -> Unit) {
+    fun triggerStorageRescan(onlyRecentHours: Int? = null, onDone: () -> Unit) {
         val dirs = listOfNotNull(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             Environment.getExternalStorageDirectory()
-        ).map { it.absolutePath }.distinct().toTypedArray()
+        )
+        val audioExtensions = setOf("mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "wma", "amr")
+        val cutoffMs = onlyRecentHours?.let { System.currentTimeMillis() - it * 3_600_000L }
+        val filePaths = mutableListOf<String>()
+        for (dir in dirs) {
+            runCatching {
+                if (dir.exists() && dir.isDirectory) {
+                    dir.walkTopDown().maxDepth(3).forEach { f ->
+                        if (f.isFile && f.extension.lowercase() in audioExtensions) {
+                            if (cutoffMs == null || f.lastModified() >= cutoffMs) {
+                                filePaths.add(f.absolutePath)
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        MediaScannerConnection.scanFile(context, dirs, null) { _, _ ->
+        val targets = filePaths.distinct().toTypedArray()
+        if (targets.isEmpty()) {
             onDone()
+            return
+        }
+
+        val remaining = AtomicInteger(targets.size)
+        MediaScannerConnection.scanFile(context, targets, null) { _, _ ->
+            if (remaining.decrementAndGet() <= 0) {
+                onDone()
+            }
         }
     }
 
