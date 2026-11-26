@@ -18,9 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -132,6 +135,7 @@ fun MiniPlayerBar(
 fun NowPlayingDialog(
     track: AudioTrack,
     isPlaying: Boolean,
+    isFavorite: Boolean,
     positionMs: Long,
     durationMs: Long,
     shuffleEnabled: Boolean,
@@ -146,6 +150,8 @@ fun NowPlayingDialog(
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
     onSelectSpeed: (Float) -> Unit,
+    onToggleFavorite: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onOpenEqualizer: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -221,19 +227,38 @@ fun NowPlayingDialog(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PulseSurface)
-                        .clickable(onClick = onOpenEqualizer)
-                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "DSP Active: $eqPresetLabel",
-                        color = PulseCyan,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (isFavorite) PulsePink else Color.White
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(PulseSurface)
+                            .clickable(onClick = onOpenEqualizer)
+                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "DSP: $eqPresetLabel",
+                            color = PulseCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    IconButton(onClick = onAddToPlaylist) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistAdd,
+                            contentDescription = "Add to Playlist",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
 

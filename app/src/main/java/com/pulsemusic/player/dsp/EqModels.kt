@@ -2,6 +2,7 @@ package com.pulsemusic.player.dsp
 
 enum class EqPreset(val displayName: String) {
     TIKTOK_PUNCH("TikTok Punch"),
+    TIKTOK_ULTRA("TikTok Ultra Bass"),
     BASS_EXTREME("Bass Extreme"),
     STUDIO_VOCAL("Studio Vocal"),
     CLUB_EDM("Club / EDM"),
@@ -13,20 +14,31 @@ enum class EqPreset(val displayName: String) {
         TIKTOK_PUNCH -> EqSettings(
             enabled = true,
             preset = TIKTOK_PUNCH,
-            bandsDb = listOf(4.5f, 5.5f, 4.0f, -1.5f, 0.0f, 1.5f, 3.0f, 4.0f, 4.5f, 3.5f),
-            bassBoostStrength = 550,
-            virtualizerStrength = 350,
-            loudnessGainMb = 450,
+            // Punchy TikTok loudness curve: deep 62Hz punch, clean 250Hz, crisp 2-8kHz vocals/air
+            bandsDb = listOf(5.5f, 6.5f, 4.5f, -2.0f, 0.5f, 2.0f, 3.5f, 5.0f, 5.5f, 4.5f),
+            bassBoostStrength = 650,
+            virtualizerStrength = 400,
+            loudnessGainMb = 650,
+            compressorEnabled = true,
+            limiterEnabled = true
+        )
+        TIKTOK_ULTRA -> EqSettings(
+            enabled = true,
+            preset = TIKTOK_ULTRA,
+            bandsDb = listOf(8.0f, 8.5f, 6.0f, -1.5f, 0.0f, 2.0f, 4.0f, 5.5f, 6.0f, 5.0f),
+            bassBoostStrength = 850,
+            virtualizerStrength = 500,
+            loudnessGainMb = 750,
             compressorEnabled = true,
             limiterEnabled = true
         )
         BASS_EXTREME -> EqSettings(
             enabled = true,
             preset = BASS_EXTREME,
-            bandsDb = listOf(8.0f, 7.5f, 5.5f, 1.5f, -1.0f, 0.0f, 1.5f, 2.5f, 3.0f, 2.5f),
-            bassBoostStrength = 850,
-            virtualizerStrength = 300,
-            loudnessGainMb = 400,
+            bandsDb = listOf(9.0f, 8.0f, 5.5f, 1.5f, -1.0f, 0.0f, 1.5f, 2.5f, 3.0f, 2.5f),
+            bassBoostStrength = 900,
+            virtualizerStrength = 350,
+            loudnessGainMb = 500,
             compressorEnabled = true,
             limiterEnabled = true
         )
@@ -36,17 +48,17 @@ enum class EqPreset(val displayName: String) {
             bandsDb = listOf(-2.0f, -1.0f, 0.5f, 1.5f, 3.0f, 4.5f, 5.0f, 4.0f, 2.5f, 1.5f),
             bassBoostStrength = 150,
             virtualizerStrength = 250,
-            loudnessGainMb = 350,
+            loudnessGainMb = 400,
             compressorEnabled = true,
             limiterEnabled = true
         )
         CLUB_EDM -> EqSettings(
             enabled = true,
             preset = CLUB_EDM,
-            bandsDb = listOf(6.0f, 5.5f, 3.5f, 0.0f, -1.5f, 1.0f, 3.0f, 4.5f, 5.5f, 5.0f),
-            bassBoostStrength = 700,
-            virtualizerStrength = 550,
-            loudnessGainMb = 500,
+            bandsDb = listOf(6.5f, 6.0f, 4.0f, 0.0f, -1.5f, 1.0f, 3.0f, 4.5f, 5.5f, 5.0f),
+            bassBoostStrength = 750,
+            virtualizerStrength = 600,
+            loudnessGainMb = 600,
             compressorEnabled = true,
             limiterEnabled = true
         )
@@ -56,7 +68,7 @@ enum class EqPreset(val displayName: String) {
             bandsDb = listOf(3.0f, 3.5f, 2.0f, 1.0f, 0.5f, 0.0f, -0.5f, 0.5f, 1.5f, 1.0f),
             bassBoostStrength = 300,
             virtualizerStrength = 200,
-            loudnessGainMb = 200,
+            loudnessGainMb = 250,
             compressorEnabled = false,
             limiterEnabled = true
         )
@@ -78,9 +90,9 @@ data class EqSettings(
     val enabled: Boolean = true,
     val preset: EqPreset = EqPreset.TIKTOK_PUNCH,
     val bandsDb: List<Float> = EqPreset.TIKTOK_PUNCH.defaultSettings().bandsDb,
-    val bassBoostStrength: Int = 550,
-    val virtualizerStrength: Int = 350,
-    val loudnessGainMb: Int = 450,
+    val bassBoostStrength: Int = 650,
+    val virtualizerStrength: Int = 400,
+    val loudnessGainMb: Int = 650,
     val compressorEnabled: Boolean = true,
     val limiterEnabled: Boolean = true
 ) {

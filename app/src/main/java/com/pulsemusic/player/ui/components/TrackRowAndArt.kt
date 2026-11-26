@@ -16,9 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -85,7 +89,10 @@ fun TrackArtwork(
 fun TrackListRow(
     track: AudioTrack,
     isCurrent: Boolean,
+    isFavorite: Boolean = false,
     loadAlbumArt: suspend (AudioTrack) -> Bitmap?,
+    onToggleFavorite: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -94,10 +101,10 @@ fun TrackListRow(
             .clip(RoundedCornerShape(12.dp))
             .background(if (isCurrent) Color(0xFF172338) else PulseSurface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TrackArtwork(track = track, loadAlbumArt = loadAlbumArt, size = 48.dp)
+        TrackArtwork(track = track, loadAlbumArt = loadAlbumArt, size = 46.dp)
 
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -114,30 +121,43 @@ fun TrackListRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "${track.artist} • ${track.folderName}",
+                text = "${track.artist} • ${track.formattedDuration()}",
                 color = Color(0xFF94A3B8),
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-
-        Spacer(modifier = Modifier.width(8.dp))
 
         if (isCurrent) {
             Icon(
                 imageVector = Icons.Default.GraphicEq,
                 contentDescription = "Playing",
                 tint = PulsePink,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
         }
 
-        Text(
-            text = track.formattedDuration(),
-            color = Color(0xFF64748B),
-            fontSize = 12.sp
-        )
+        if (onToggleFavorite != null) {
+            IconButton(onClick = onToggleFavorite, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (isFavorite) PulsePink else Color(0xFF64748B),
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        }
+
+        if (onAddToPlaylist != null) {
+            IconButton(onClick = onAddToPlaylist, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Default.PlaylistAdd,
+                    contentDescription = "Add to Playlist",
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier.size(21.dp)
+                )
+            }
+        }
     }
 }

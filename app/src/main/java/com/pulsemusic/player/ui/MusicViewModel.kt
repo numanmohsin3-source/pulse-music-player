@@ -20,7 +20,10 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.pulsemusic.player.data.AudioFolder
 import com.pulsemusic.player.data.AudioTrack
+import com.pulsemusic.player.data.LibraryDataStore
 import com.pulsemusic.player.data.MusicScanner
+import com.pulsemusic.player.data.SmartListType
+import com.pulsemusic.player.data.UserPlaylist
 import com.pulsemusic.player.dsp.AudioDspEngine
 import com.pulsemusic.player.dsp.EqPreset
 import com.pulsemusic.player.dsp.EqPreferences
@@ -41,6 +44,12 @@ data class MusicUiState(
     val allTracks: List<AudioTrack> = emptyList(),
     val folders: List<AudioFolder> = emptyList(),
     val selectedFolder: AudioFolder? = null,
+    val selectedSmartList: SmartListType? = null,
+    val selectedPlaylistId: String? = null,
+    val favoriteIds: Set<Long> = emptySet(),
+    val playCounts: Map<Long, Int> = emptyMap(),
+    val recentPlayedIds: List<Long> = emptyList(),
+    val playlists: List<UserPlaylist> = emptyList(),
     val searchQuery: String = "",
     val currentTrack: AudioTrack? = null,
     val isPlaying: Boolean = false,
@@ -57,9 +66,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val scanner = MusicScanner(application)
     private val eqPrefs = EqPreferences(application)
+    private val libraryStore = LibraryDataStore(application)
 
     private val _uiState = MutableStateFlow(
-        MusicUiState(eqSettings = eqPrefs.load())
+        MusicUiState(
+            favoriteIds = libraryStore.loadFavorites(),
+            playCounts = libraryStore.loadPlayCounts(),
+            recentPlayedIds = libraryStore.loadRecentPlayed(),
+            playlists = libraryStore.loadPlaylists(),
+            eqSettings = eqPrefs.load()
+        )
     )
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
 
@@ -69,6 +85,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var debounceSyncJob: Job? = null
     private var mediaObserver: ContentObserver? = null
     private var trackLookup: Map<Long, AudioTrack> = emptyMap()
+    private var lastRecordedPlayId: Long = -1L
 
     init {
         connectController()
@@ -103,7 +120,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                syncPlayerState(ctrl)
+                syncPlayerState(ctrl, recordHistory = true)
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -120,9 +137,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
-    private fun syncPlayerState(ctrl: MediaController) {
+    private fun syncPlayerState(ctrl: MediaController, recordHistory: Boolean = false) {
         val currentId = ctrl.currentMediaItem?.mediaMetadata?.extras?.getLong("track_id", -1L) ?: -1L
         val resolvedTrack = trackLookup[currentId] ?: _uiState.value.currentTrack
+        if (recordHistory && resolvedTrack != null && resolvedTrack.id != lastRecordedPlayId) {
+            lastRecordedPlayId = resolvedTrack.id
+            val (counts, recent) = libraryStore.recordPlay(resolvedTrack.id)
+            _uiState.update { it.copy(playCounts = counts, recentPlayedIds = recent) }
+        }
         val dur = ctrl.duration.takeIf { it > 0 } ?: resolvedTrack?.durationMs ?: 0L
         _uiState.update {
             it.copy(
@@ -215,6 +237,78 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(selectedFolder = folder) }
     }
 
+    fun selectSmartList(type: SmartListType?) {
+        _uiState.update { it.copy(selectedSmartList = type, selectedPlaylistId = null) }
+    }
+
+    fun selectPlaylist(playlistId: String?) {
+        _uiState.update { it.copy(selectedPlaylistId = playlistId, selectedSmartList = null) }
+    }
+
+    fun resolveSmartListTracks(type: SmartListType): List<AudioTrack> {
+        val state = _uiState.value
+        return when (type) {
+            SmartListType.ALL_SONGS -> state.allTracks
+            SmartListType.FAVORITES -> state.allTracks.filter { it.id in state.favoriteIds }
+            SmartListType.RECENTLY_ADDED -> state.allTracks.sortedByDescending { it.dateAddedSec }
+            SmartListType.RECENTLY_PLAYED -> {
+                val map = state.allTracks.associateBy { it.id }
+                state.recentPlayedIds.mapNotNull { map[it] }
+            }
+            SmartListType.MOST_PLAYED -> {
+                state.allTracks
+                    .filter { (state.playCounts[it.id] ?: 0) > 0 }
+                    .sortedByDescending { state.playCounts[it.id] ?: 0 }
+            }
+            SmartListType.NOT_PLAYED -> {
+                state.allTracks.filter { (state.playCounts[it.id] ?: 0) == 0 }
+            }
+        }
+    }
+
+    fun resolvePlaylistTracks(playlist: UserPlaylist): List<AudioTrack> {
+        val map = _uiState.value.allTracks.associateBy { it.id }
+        return playlist.trackIds.mapNotNull { map[it] }
+    }
+
+    fun toggleFavorite(trackId: Long) {
+        val next = libraryStore.toggleFavorite(trackId)
+        _uiState.update { it.copy(favoriteIds = next) }
+    }
+
+    fun createPlaylist(name: String, initialTrackId: Long? = null) {
+        var updated = libraryStore.createPlaylist(name)
+        if (initialTrackId != null && updated.isNotEmpty()) {
+            updated = libraryStore.addTrackToPlaylist(updated.first().id, initialTrackId)
+        }
+        _uiState.update { it.copy(playlists = updated) }
+    }
+
+    fun renamePlaylist(playlistId: String, newName: String) {
+        val updated = libraryStore.renamePlaylist(playlistId, newName)
+        _uiState.update { it.copy(playlists = updated) }
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        val updated = libraryStore.deletePlaylist(playlistId)
+        _uiState.update {
+            it.copy(
+                playlists = updated,
+                selectedPlaylistId = if (it.selectedPlaylistId == playlistId) null else it.selectedPlaylistId
+            )
+        }
+    }
+
+    fun addTrackToPlaylist(playlistId: String, trackId: Long) {
+        val updated = libraryStore.addTrackToPlaylist(playlistId, trackId)
+        _uiState.update { it.copy(playlists = updated) }
+    }
+
+    fun removeTrackFromPlaylist(playlistId: String, trackId: Long) {
+        val updated = libraryStore.removeTrackFromPlaylist(playlistId, trackId)
+        _uiState.update { it.copy(playlists = updated) }
+    }
+
     fun updateSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
     }
@@ -239,16 +333,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val safeIndex = startIndex.coerceIn(0, tracks.lastIndex)
+        val selected = tracks[safeIndex]
+        lastRecordedPlayId = selected.id
+        val (counts, recent) = libraryStore.recordPlay(selected.id)
+
         ctrl.setMediaItems(mediaItems, safeIndex, 0L)
         ctrl.prepare()
         ctrl.play()
 
-        val selected = tracks[safeIndex]
         _uiState.update {
             it.copy(
                 currentTrack = selected,
                 durationMs = selected.durationMs,
-                positionMs = 0L
+                positionMs = 0L,
+                playCounts = counts,
+                recentPlayedIds = recent
             )
         }
     }

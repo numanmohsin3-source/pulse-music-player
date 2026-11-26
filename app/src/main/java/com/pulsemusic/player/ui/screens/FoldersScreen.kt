@@ -55,10 +55,13 @@ fun FoldersScreen(
     folders: List<AudioFolder>,
     selectedFolder: AudioFolder?,
     currentTrackId: Long?,
+    favoriteIds: Set<Long>,
     isScanning: Boolean,
     loadAlbumArt: suspend (AudioTrack) -> Bitmap?,
     onSelectFolder: (AudioFolder?) -> Unit,
     onPlayTracks: (List<AudioTrack>, Int) -> Unit,
+    onToggleFavorite: (Long) -> Unit,
+    onAddToPlaylist: (AudioTrack) -> Unit,
     onRescanStorage: () -> Unit
 ) {
     Column(
@@ -203,7 +206,10 @@ fun FoldersScreen(
                     TrackListRow(
                         track = track,
                         isCurrent = track.id == currentTrackId,
+                        isFavorite = track.id in favoriteIds,
                         loadAlbumArt = loadAlbumArt,
+                        onToggleFavorite = { onToggleFavorite(track.id) },
+                        onAddToPlaylist = { onAddToPlaylist(track) },
                         onClick = { onPlayTracks(selectedFolder.tracks, index) }
                     )
                 }

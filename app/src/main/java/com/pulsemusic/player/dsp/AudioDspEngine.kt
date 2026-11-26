@@ -191,22 +191,22 @@ object AudioDspEngine {
     @RequiresApi(Build.VERSION_CODES.P)
     private fun buildMasterLimiter(settings: EqSettings): DynamicsProcessing.Limiter {
         val active = settings.enabled && settings.limiterEnabled
-        val boostDb = (settings.loudnessGainMb / 100f).coerceIn(0f, 8f)
+        val boostDb = (settings.loudnessGainMb / 100f).coerceIn(0f, 10f)
         return DynamicsProcessing.Limiter(
             true,
             active,
             0,
             2f,
-            50f,
+            45f,
             10f,
-            -1.0f,
-            if (active) boostDb * 0.45f else 0f
+            -0.8f,
+            if (active) boostDb * 0.55f else 0f
         )
     }
 
     private fun computeInputGainDb(settings: EqSettings): Float {
         if (!settings.enabled) return 0f
-        return ((settings.loudnessGainMb / 100f) * 0.35f).coerceIn(0f, 4.5f)
+        return ((settings.loudnessGainMb / 100f) * 0.45f).coerceIn(0f, 5.0f)
     }
 
     private fun applyLegacyEffects(settings: EqSettings) {

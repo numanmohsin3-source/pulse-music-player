@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -36,9 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,11 +45,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.pulsemusic.player.data.AudioTrack
 import com.pulsemusic.player.ui.MusicViewModel
 import com.pulsemusic.player.ui.components.MiniPlayerBar
 import com.pulsemusic.player.ui.components.NowPlayingDialog
+import com.pulsemusic.player.ui.screens.AddToPlaylistDialog
 import com.pulsemusic.player.ui.screens.EqualizerScreen
 import com.pulsemusic.player.ui.screens.FoldersScreen
+import com.pulsemusic.player.ui.screens.LibraryHubScreen
 import com.pulsemusic.player.ui.screens.SongsScreen
 import com.pulsemusic.player.ui.theme.PulseBg
 import com.pulsemusic.player.ui.theme.PulseCyan
@@ -59,7 +63,7 @@ import com.pulsemusic.player.ui.theme.PulseMusicTheme
 import com.pulsemusic.player.ui.theme.PulseSurface
 
 private enum class MusicTab {
-    FOLDERS, SONGS, EQUALIZER
+    LIBRARY, FOLDERS, SONGS, EQUALIZER
 }
 
 class MainActivity : ComponentActivity() {
@@ -71,8 +75,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val state by viewModel.uiState.collectAsState()
-            var activeTab by remember { mutableStateOf(MusicTab.FOLDERS) }
+            var activeTab by remember { mutableStateOf(MusicTab.LIBRARY) }
             var showFullPlayer by remember { mutableStateOf(false) }
+            var trackToAddPlaylist by remember { mutableStateOf<AudioTrack?>(null) }
 
             val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Manifest.permission.READ_MEDIA_AUDIO
@@ -126,8 +131,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = activeTab == MusicTab.FOLDERS && state.selectedFolder != null) {
-                viewModel.selectFolder(null)
+            BackHandler(
+                enabled = (activeTab == MusicTab.FOLDERS && state.selectedFolder != null) ||
+                    (activeTab == MusicTab.LIBRARY && (state.selectedSmartList != null || state.selectedPlaylistId != null))
+            ) {
+                if (activeTab == MusicTab.FOLDERS) {
+                    viewModel.selectFolder(null)
+                } else {
+                    viewModel.selectSmartList(null)
+                    viewModel.selectPlaylist(null)
+                }
             }
 
             PulseMusicTheme {
@@ -195,6 +208,12 @@ class MainActivity : ComponentActivity() {
                                 }
                                 NavigationBar(containerColor = PulseSurface) {
                                     NavigationBarItem(
+                                        selected = activeTab == MusicTab.LIBRARY,
+                                        onClick = { activeTab = MusicTab.LIBRARY },
+                                        icon = { Icon(Icons.Default.QueueMusic, contentDescription = null) },
+                                        label = { Text("Library") }
+                                    )
+                                    NavigationBarItem(
                                         selected = activeTab == MusicTab.FOLDERS,
                                         onClick = { activeTab = MusicTab.FOLDERS },
                                         icon = { Icon(Icons.Default.Folder, contentDescription = null) },
@@ -222,14 +241,40 @@ class MainActivity : ComponentActivity() {
                                 .padding(innerPadding)
                         ) {
                             when (activeTab) {
+                                MusicTab.LIBRARY -> LibraryHubScreen(
+                                    allTracks = state.allTracks,
+                                    favoriteIds = state.favoriteIds,
+                                    playCounts = state.playCounts,
+                                    recentPlayedIds = state.recentPlayedIds,
+                                    playlists = state.playlists,
+                                    selectedSmartList = state.selectedSmartList,
+                                    selectedPlaylistId = state.selectedPlaylistId,
+                                    currentTrackId = state.currentTrack?.id,
+                                    loadAlbumArt = { viewModel.loadAlbumArt(it) },
+                                    resolveSmartListTracks = { viewModel.resolveSmartListTracks(it) },
+                                    resolvePlaylistTracks = { viewModel.resolvePlaylistTracks(it) },
+                                    onSelectSmartList = { viewModel.selectSmartList(it) },
+                                    onSelectPlaylist = { viewModel.selectPlaylist(it) },
+                                    onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
+                                    onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+                                    onRemoveFromPlaylist = { plId, tId -> viewModel.removeTrackFromPlaylist(plId, tId) },
+                                    onToggleFavorite = { tId -> viewModel.toggleFavorite(tId) },
+                                    onRequestAddToPlaylist = { track -> trackToAddPlaylist = track },
+                                    onPlayTracks = { list, idx -> viewModel.playFromList(list, idx) },
+                                    onRescanStorage = { viewModel.rescanStorage() }
+                                )
+
                                 MusicTab.FOLDERS -> FoldersScreen(
                                     folders = state.folders,
                                     selectedFolder = state.selectedFolder,
                                     currentTrackId = state.currentTrack?.id,
+                                    favoriteIds = state.favoriteIds,
                                     isScanning = state.isScanning,
                                     loadAlbumArt = { viewModel.loadAlbumArt(it) },
                                     onSelectFolder = { viewModel.selectFolder(it) },
                                     onPlayTracks = { list, idx -> viewModel.playFromList(list, idx) },
+                                    onToggleFavorite = { tId -> viewModel.toggleFavorite(tId) },
+                                    onAddToPlaylist = { track -> trackToAddPlaylist = track },
                                     onRescanStorage = { viewModel.rescanStorage() }
                                 )
 
@@ -237,9 +282,12 @@ class MainActivity : ComponentActivity() {
                                     tracks = state.allTracks,
                                     searchQuery = state.searchQuery,
                                     currentTrackId = state.currentTrack?.id,
+                                    favoriteIds = state.favoriteIds,
                                     loadAlbumArt = { viewModel.loadAlbumArt(it) },
                                     onSearchChange = { viewModel.updateSearchQuery(it) },
                                     onPlayTracks = { list, idx -> viewModel.playFromList(list, idx) },
+                                    onToggleFavorite = { tId -> viewModel.toggleFavorite(tId) },
+                                    onAddToPlaylist = { track -> trackToAddPlaylist = track },
                                     onRescanStorage = { viewModel.rescanStorage() }
                                 )
 
@@ -265,6 +313,7 @@ class MainActivity : ComponentActivity() {
                             NowPlayingDialog(
                                 track = track,
                                 isPlaying = state.isPlaying,
+                                isFavorite = track.id in state.favoriteIds,
                                 positionMs = state.positionMs,
                                 durationMs = state.durationMs,
                                 shuffleEnabled = state.shuffleEnabled,
@@ -279,6 +328,8 @@ class MainActivity : ComponentActivity() {
                                 onToggleShuffle = { viewModel.toggleShuffle() },
                                 onCycleRepeat = { viewModel.cycleRepeatMode() },
                                 onSelectSpeed = { viewModel.setPlaybackSpeed(it) },
+                                onToggleFavorite = { viewModel.toggleFavorite(track.id) },
+                                onAddToPlaylist = { trackToAddPlaylist = track },
                                 onOpenEqualizer = {
                                     showFullPlayer = false
                                     activeTab = MusicTab.EQUALIZER
@@ -286,6 +337,22 @@ class MainActivity : ComponentActivity() {
                                 onDismiss = { showFullPlayer = false }
                             )
                         }
+                    }
+
+                    trackToAddPlaylist?.let { targetTrack ->
+                        AddToPlaylistDialog(
+                            track = targetTrack,
+                            playlists = state.playlists,
+                            onSelectPlaylist = { plId ->
+                                viewModel.addTrackToPlaylist(plId, targetTrack.id)
+                                trackToAddPlaylist = null
+                            },
+                            onCreateAndAdd = { name ->
+                                viewModel.createPlaylist(name, initialTrackId = targetTrack.id)
+                                trackToAddPlaylist = null
+                            },
+                            onDismiss = { trackToAddPlaylist = null }
+                        )
                     }
                 }
             }

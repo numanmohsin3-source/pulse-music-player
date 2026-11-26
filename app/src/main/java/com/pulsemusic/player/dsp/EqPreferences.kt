@@ -7,9 +7,16 @@ class EqPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("pulse_eq_prefs", Context.MODE_PRIVATE)
 
     fun load(): EqSettings {
+        val migrated = prefs.getBoolean("v2_tiktok_upgraded", false)
         val presetName = prefs.getString("preset", EqPreset.TIKTOK_PUNCH.name) ?: EqPreset.TIKTOK_PUNCH.name
         val preset = runCatching { EqPreset.valueOf(presetName) }.getOrDefault(EqPreset.TIKTOK_PUNCH)
         val defaults = preset.defaultSettings()
+
+        if (!migrated && preset == EqPreset.TIKTOK_PUNCH) {
+            save(defaults)
+            prefs.edit().putBoolean("v2_tiktok_upgraded", true).apply()
+            return defaults
+        }
 
         val bandsStr = prefs.getString("bands", null)
         val bands = if (!bandsStr.isNullOrBlank()) {
