@@ -46,7 +46,7 @@ fun SongsScreen(
     onSearchChange: (String) -> Unit,
     onPlayTracks: (List<AudioTrack>, Int) -> Unit,
     onToggleFavorite: (Long) -> Unit,
-    onAddToPlaylist: (AudioTrack) -> Unit,
+    onOpenSongOptions: (AudioTrack) -> Unit,
     onRescanStorage: () -> Unit
 ) {
     val filtered = remember(tracks, searchQuery) {
@@ -136,7 +136,7 @@ fun SongsScreen(
                         isFavorite = track.id in favoriteIds,
                         loadAlbumArt = loadAlbumArt,
                         onToggleFavorite = { onToggleFavorite(track.id) },
-                        onAddToPlaylist = { onAddToPlaylist(track) },
+                        onMoreOptions = { onOpenSongOptions(track) },
                         onClick = { onPlayTracks(filtered, index) }
                     )
                 }

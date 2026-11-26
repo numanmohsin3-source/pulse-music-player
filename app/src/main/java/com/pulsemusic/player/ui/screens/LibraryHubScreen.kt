@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -88,7 +89,8 @@ fun LibraryHubScreen(
     onDeletePlaylist: (String) -> Unit,
     onRemoveFromPlaylist: (String, Long) -> Unit,
     onToggleFavorite: (Long) -> Unit,
-    onRequestAddToPlaylist: (AudioTrack) -> Unit,
+    onOpenSongOptions: (AudioTrack) -> Unit,
+    onOpenSecurityInfo: () -> Unit,
     onPlayTracks: (List<AudioTrack>, Int) -> Unit,
     onRescanStorage: () -> Unit
 ) {
@@ -109,7 +111,7 @@ fun LibraryHubScreen(
             onBack = { onSelectSmartList(null) },
             onPlayTracks = onPlayTracks,
             onToggleFavorite = onToggleFavorite,
-            onAddToPlaylist = onRequestAddToPlaylist,
+            onOpenSongOptions = onOpenSongOptions,
             onRemoveFromList = null
         )
     } else if (activePlaylist != null) {
@@ -125,7 +127,7 @@ fun LibraryHubScreen(
             onBack = { onSelectPlaylist(null) },
             onPlayTracks = onPlayTracks,
             onToggleFavorite = onToggleFavorite,
-            onAddToPlaylist = onRequestAddToPlaylist,
+            onOpenSongOptions = onOpenSongOptions,
             onRemoveFromList = { trackId -> onRemoveFromPlaylist(activePlaylist.id, trackId) }
         )
     } else {
@@ -157,8 +159,13 @@ fun LibraryHubScreen(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = onRescanStorage) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Rescan", tint = PulseCyan)
+                    Row {
+                        IconButton(onClick = onOpenSecurityInfo) {
+                            Icon(Icons.Default.Shield, contentDescription = "Security Shield", tint = Color(0xFF10B981))
+                        }
+                        IconButton(onClick = onRescanStorage) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Rescan", tint = PulseCyan)
+                        }
                     }
                 }
             }
@@ -368,7 +375,7 @@ private fun ListDetailView(
     onBack: () -> Unit,
     onPlayTracks: (List<AudioTrack>, Int) -> Unit,
     onToggleFavorite: (Long) -> Unit,
-    onAddToPlaylist: (AudioTrack) -> Unit,
+    onOpenSongOptions: (AudioTrack) -> Unit,
     onRemoveFromList: ((Long) -> Unit)?
 ) {
     Column(
@@ -451,8 +458,8 @@ private fun ListDetailView(
                                 isFavorite = track.id in favoriteIds,
                                 loadAlbumArt = loadAlbumArt,
                                 onToggleFavorite = { onToggleFavorite(track.id) },
-                                onAddToPlaylist = if (onRemoveFromList == null) {
-                                    { onAddToPlaylist(track) }
+                                onMoreOptions = if (onRemoveFromList == null) {
+                                    { onOpenSongOptions(track) }
                                 } else null,
                                 onClick = { onPlayTracks(tracks, index) }
                             )

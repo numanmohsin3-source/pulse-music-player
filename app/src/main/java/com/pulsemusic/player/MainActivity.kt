@@ -1,13 +1,16 @@
 package com.pulsemusic.player
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
@@ -49,9 +52,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pulsemusic.player.data.AudioTrack
+import com.pulsemusic.player.ui.ClipboardMode
 import com.pulsemusic.player.ui.MusicViewModel
+import com.pulsemusic.player.ui.components.DeleteConfirmDialog
+import com.pulsemusic.player.ui.components.EditTrackDialog
+import com.pulsemusic.player.ui.components.FolderPickerDialog
 import com.pulsemusic.player.ui.components.MiniPlayerBar
 import com.pulsemusic.player.ui.components.NowPlayingDialog
+import com.pulsemusic.player.ui.components.RenameTrackDialog
+import com.pulsemusic.player.ui.components.SecurityStatusDialog
+import com.pulsemusic.player.ui.components.SongOptionsBottomSheet
 import com.pulsemusic.player.ui.screens.AddToPlaylistDialog
 import com.pulsemusic.player.ui.screens.EqualizerScreen
 import com.pulsemusic.player.ui.screens.FoldersScreen
@@ -77,7 +87,14 @@ class MainActivity : ComponentActivity() {
             val state by viewModel.uiState.collectAsState()
             var activeTab by remember { mutableStateOf(MusicTab.LIBRARY) }
             var showFullPlayer by remember { mutableStateOf(false) }
+
             var trackToAddPlaylist by remember { mutableStateOf<AudioTrack?>(null) }
+            var optionsTrack by remember { mutableStateOf<AudioTrack?>(null) }
+            var editTrack by remember { mutableStateOf<AudioTrack?>(null) }
+            var renameTrack by remember { mutableStateOf<AudioTrack?>(null) }
+            var moveTrack by remember { mutableStateOf<AudioTrack?>(null) }
+            var deleteTrack by remember { mutableStateOf<AudioTrack?>(null) }
+            var showSecurityDialog by remember { mutableStateOf(false) }
 
             val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Manifest.permission.READ_MEDIA_AUDIO
@@ -100,10 +117,30 @@ class MainActivity : ComponentActivity() {
                     PackageManager.PERMISSION_GRANTED
             }
 
+            val consentLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartIntentSenderForResult()
+            ) { result ->
+                viewModel.onUserConsentResult(result.resultCode == Activity.RESULT_OK)
+            }
+
+            LaunchedEffect(state.pendingConsentSender) {
+                val sender = state.pendingConsentSender ?: return@LaunchedEffect
+                consentLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+
+            LaunchedEffect(state.statusMessage) {
+                val msg = state.statusMessage ?: return@LaunchedEffect
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                viewModel.setStatusMessage(null)
+            }
+
             LaunchedEffect(Unit) {
                 if (!hasAudioPerm) {
                     val req = buildList {
                         add(audioPermission)
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             add(Manifest.permission.POST_NOTIFICATIONS)
                         }
@@ -169,7 +206,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Allow audio storage permission to scan all music folders and songs on your phone.",
+                            text = "Allow audio storage permission to scan and manage all music folders and songs on your phone.",
                             color = Color(0xFF94A3B8),
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center
@@ -179,6 +216,9 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 val req = buildList {
                                     add(audioPermission)
+                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                                        add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                    }
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                         add(Manifest.permission.POST_NOTIFICATIONS)
                                     }
@@ -259,7 +299,8 @@ class MainActivity : ComponentActivity() {
                                     onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
                                     onRemoveFromPlaylist = { plId, tId -> viewModel.removeTrackFromPlaylist(plId, tId) },
                                     onToggleFavorite = { tId -> viewModel.toggleFavorite(tId) },
-                                    onRequestAddToPlaylist = { track -> trackToAddPlaylist = track },
+                                    onOpenSongOptions = { track -> optionsTrack = track },
+                                    onOpenSecurityInfo = { showSecurityDialog = true },
                                     onPlayTracks = { list, idx -> viewModel.playFromList(list, idx) },
                                     onRescanStorage = { viewModel.rescanStorage() }
                                 )
@@ -269,12 +310,15 @@ class MainActivity : ComponentActivity() {
                                     selectedFolder = state.selectedFolder,
                                     currentTrackId = state.currentTrack?.id,
                                     favoriteIds = state.favoriteIds,
+                                    clipboard = state.clipboard,
                                     isScanning = state.isScanning,
                                     loadAlbumArt = { viewModel.loadAlbumArt(it) },
                                     onSelectFolder = { viewModel.selectFolder(it) },
                                     onPlayTracks = { list, idx -> viewModel.playFromList(list, idx) },
                                     onToggleFavorite = { tId -> viewModel.toggleFavorite(tId) },
-                                    onAddToPlaylist = { track -> trackToAddPlaylist = track },
+                                    onOpenSongOptions = { track -> optionsTrack = track },
+                                    onPasteHere = { folder -> viewModel.pasteClipboardIntoFolder(folder) },
+                                    onClearClipboard = { viewModel.clearClipboard() },
                                     onRescanStorage = { viewModel.rescanStorage() }
                                 )
 
@@ -287,7 +331,7 @@ class MainActivity : ComponentActivity() {
                                     onSearchChange = { viewModel.updateSearchQuery(it) },
                                     onPlayTracks = { list, idx -> viewModel.playFromList(list, idx) },
                                     onToggleFavorite = { tId -> viewModel.toggleFavorite(tId) },
-                                    onAddToPlaylist = { track -> trackToAddPlaylist = track },
+                                    onOpenSongOptions = { track -> optionsTrack = track },
                                     onRescanStorage = { viewModel.rescanStorage() }
                                 )
 
@@ -337,6 +381,77 @@ class MainActivity : ComponentActivity() {
                                 onDismiss = { showFullPlayer = false }
                             )
                         }
+                    }
+
+                    optionsTrack?.let { target ->
+                        val activeFolderTracks = state.selectedFolder?.tracks ?: state.allTracks
+                        val idx = activeFolderTracks.indexOfFirst { it.id == target.id }.coerceAtLeast(0)
+                        SongOptionsBottomSheet(
+                            track = target,
+                            isFavorite = target.id in state.favoriteIds,
+                            onPlay = { viewModel.playFromList(activeFolderTracks, idx) },
+                            onToggleFavorite = { viewModel.toggleFavorite(target.id) },
+                            onAddToPlaylist = { trackToAddPlaylist = target },
+                            onEdit = { editTrack = target },
+                            onRename = { renameTrack = target },
+                            onCopy = { viewModel.setClipboard(target, ClipboardMode.COPY) },
+                            onCut = { viewModel.setClipboard(target, ClipboardMode.CUT) },
+                            onMoveToFolder = { moveTrack = target },
+                            onDelete = { deleteTrack = target },
+                            onDismiss = { optionsTrack = null }
+                        )
+                    }
+
+                    editTrack?.let { target ->
+                        EditTrackDialog(
+                            track = target,
+                            onSave = { t, a, alb ->
+                                viewModel.editTrackInfo(target, t, a, alb)
+                                editTrack = null
+                            },
+                            onDismiss = { editTrack = null }
+                        )
+                    }
+
+                    renameTrack?.let { target ->
+                        RenameTrackDialog(
+                            track = target,
+                            onRename = { newName ->
+                                viewModel.renameTrack(target, newName)
+                                renameTrack = null
+                            },
+                            onDismiss = { renameTrack = null }
+                        )
+                    }
+
+                    moveTrack?.let { target ->
+                        FolderPickerDialog(
+                            title = "Move '${target.title}' to...",
+                            folders = state.folders,
+                            onPick = { dest ->
+                                viewModel.moveTrackToFolder(target, dest)
+                                moveTrack = null
+                            },
+                            onDismiss = { moveTrack = null }
+                        )
+                    }
+
+                    deleteTrack?.let { target ->
+                        DeleteConfirmDialog(
+                            track = target,
+                            onConfirm = {
+                                viewModel.deleteTrack(target)
+                                deleteTrack = null
+                            },
+                            onDismiss = { deleteTrack = null }
+                        )
+                    }
+
+                    if (showSecurityDialog) {
+                        SecurityStatusDialog(
+                            status = state.securityStatus,
+                            onDismiss = { showSecurityDialog = false }
+                        )
                     }
 
                     trackToAddPlaylist?.let { targetTrack ->

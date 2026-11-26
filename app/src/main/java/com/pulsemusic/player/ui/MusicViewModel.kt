@@ -2,6 +2,7 @@ package com.pulsemusic.player.ui
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.IntentSender
 import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.net.Uri
@@ -18,8 +19,10 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.pulsemusic.player.data.AudioFileManager
 import com.pulsemusic.player.data.AudioFolder
 import com.pulsemusic.player.data.AudioTrack
+import com.pulsemusic.player.data.FileOpResult
 import com.pulsemusic.player.data.LibraryDataStore
 import com.pulsemusic.player.data.MusicScanner
 import com.pulsemusic.player.data.SmartListType
@@ -29,6 +32,8 @@ import com.pulsemusic.player.dsp.EqPreset
 import com.pulsemusic.player.dsp.EqPreferences
 import com.pulsemusic.player.dsp.EqSettings
 import com.pulsemusic.player.player.MusicService
+import com.pulsemusic.player.security.AppSecurityStatus
+import com.pulsemusic.player.security.SecurityGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,6 +42,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class ClipboardMode {
+    COPY, CUT
+}
+
+data class FileClipboard(
+    val track: AudioTrack,
+    val mode: ClipboardMode
+)
 
 data class MusicUiState(
     val isScanning: Boolean = false,
@@ -50,6 +64,15 @@ data class MusicUiState(
     val playCounts: Map<Long, Int> = emptyMap(),
     val recentPlayedIds: List<Long> = emptyList(),
     val playlists: List<UserPlaylist> = emptyList(),
+    val clipboard: FileClipboard? = null,
+    val pendingConsentSender: IntentSender? = null,
+    val statusMessage: String? = null,
+    val securityStatus: AppSecurityStatus = AppSecurityStatus(
+        hasInternetPermission = false,
+        isBackupDisabled = true,
+        isDebuggerAttached = false,
+        isRootSuspected = false
+    ),
     val searchQuery: String = "",
     val currentTrack: AudioTrack? = null,
     val isPlaying: Boolean = false,
@@ -65,6 +88,7 @@ data class MusicUiState(
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val scanner = MusicScanner(application)
+    private val fileManager = AudioFileManager(application)
     private val eqPrefs = EqPreferences(application)
     private val libraryStore = LibraryDataStore(application)
 
@@ -74,6 +98,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             playCounts = libraryStore.loadPlayCounts(),
             recentPlayedIds = libraryStore.loadRecentPlayed(),
             playlists = libraryStore.loadPlaylists(),
+            securityStatus = SecurityGuard.inspect(application),
             eqSettings = eqPrefs.load()
         )
     )
@@ -86,6 +111,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var mediaObserver: ContentObserver? = null
     private var trackLookup: Map<Long, AudioTrack> = emptyMap()
     private var lastRecordedPlayId: Long = -1L
+    private var pendingRetryAction: (suspend () -> FileOpResult)? = null
 
     init {
         connectController()
@@ -233,6 +259,95 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // File management operations (Edit, Rename, Copy, Cut/Move, Delete)
+    fun editTrackInfo(track: AudioTrack, title: String, artist: String, album: String) {
+        runFileOperation {
+            fileManager.editMetadata(track, title, artist, album)
+        }
+    }
+
+    fun renameTrack(track: AudioTrack, newName: String) {
+        runFileOperation {
+            fileManager.renameTrack(track, newName)
+        }
+    }
+
+    fun deleteTrack(track: AudioTrack) {
+        runFileOperation {
+            fileManager.deleteTrack(track)
+        }
+    }
+
+    fun copyTrackToFolder(track: AudioTrack, folder: AudioFolder) {
+        runFileOperation {
+            fileManager.copyTrackToFolder(track, folder)
+        }
+    }
+
+    fun moveTrackToFolder(track: AudioTrack, folder: AudioFolder) {
+        runFileOperation {
+            fileManager.moveTrackToFolder(track, folder)
+        }
+    }
+
+    fun setClipboard(track: AudioTrack, mode: ClipboardMode) {
+        val label = if (mode == ClipboardMode.COPY) "Copied" else "Cut"
+        _uiState.update {
+            it.copy(
+                clipboard = FileClipboard(track, mode),
+                statusMessage = "$label '${track.title}'. Open any folder and tap Paste."
+            )
+        }
+    }
+
+    fun clearClipboard() {
+        _uiState.update { it.copy(clipboard = null) }
+    }
+
+    fun pasteClipboardIntoFolder(destFolder: AudioFolder) {
+        val item = _uiState.value.clipboard ?: return
+        _uiState.update { it.copy(clipboard = null) }
+        runFileOperation {
+            when (item.mode) {
+                ClipboardMode.COPY -> fileManager.copyTrackToFolder(item.track, destFolder)
+                ClipboardMode.CUT -> fileManager.moveTrackToFolder(item.track, destFolder)
+            }
+        }
+    }
+
+    fun onUserConsentResult(approved: Boolean) {
+        val retry = pendingRetryAction
+        pendingRetryAction = null
+        _uiState.update { it.copy(pendingConsentSender = null) }
+        if (!approved || retry == null) {
+            setStatusMessage("Action cancelled")
+            return
+        }
+        runFileOperation(retry)
+    }
+
+    private fun runFileOperation(op: suspend () -> FileOpResult) {
+        viewModelScope.launch {
+            when (val res = op()) {
+                is FileOpResult.Success -> {
+                    setStatusMessage(res.message)
+                    scanLibrary()
+                }
+                is FileOpResult.NeedsUserConsent -> {
+                    pendingRetryAction = res.retryAction
+                    _uiState.update { it.copy(pendingConsentSender = res.intentSender) }
+                }
+                is FileOpResult.Error -> {
+                    setStatusMessage(res.message)
+                }
+            }
+        }
+    }
+
+    fun setStatusMessage(msg: String?) {
+        _uiState.update { it.copy(statusMessage = msg) }
+    }
+
     fun selectFolder(folder: AudioFolder?) {
         _uiState.update { it.copy(selectedFolder = folder) }
     }
@@ -281,11 +396,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (initialTrackId != null && updated.isNotEmpty()) {
             updated = libraryStore.addTrackToPlaylist(updated.first().id, initialTrackId)
         }
-        _uiState.update { it.copy(playlists = updated) }
-    }
-
-    fun renamePlaylist(playlistId: String, newName: String) {
-        val updated = libraryStore.renamePlaylist(playlistId, newName)
         _uiState.update { it.copy(playlists = updated) }
     }
 

@@ -1,9 +1,10 @@
 package com.pulsemusic.player.ui.components
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -85,6 +86,7 @@ fun TrackArtwork(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackListRow(
     track: AudioTrack,
@@ -92,7 +94,7 @@ fun TrackListRow(
     isFavorite: Boolean = false,
     loadAlbumArt: suspend (AudioTrack) -> Bitmap?,
     onToggleFavorite: (() -> Unit)? = null,
-    onAddToPlaylist: (() -> Unit)? = null,
+    onMoreOptions: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -100,7 +102,10 @@ fun TrackListRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(if (isCurrent) Color(0xFF172338) else PulseSurface)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { onMoreOptions?.invoke() }
+            )
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -149,13 +154,13 @@ fun TrackListRow(
             }
         }
 
-        if (onAddToPlaylist != null) {
-            IconButton(onClick = onAddToPlaylist, modifier = Modifier.size(36.dp)) {
+        if (onMoreOptions != null) {
+            IconButton(onClick = onMoreOptions, modifier = Modifier.size(36.dp)) {
                 Icon(
-                    imageVector = Icons.Default.PlaylistAdd,
-                    contentDescription = "Add to Playlist",
-                    tint = Color(0xFF94A3B8),
-                    modifier = Modifier.size(21.dp)
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Song Options",
+                    tint = Color(0xFFCBD5E1),
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

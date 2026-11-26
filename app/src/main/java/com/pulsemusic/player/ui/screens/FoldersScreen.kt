@@ -21,18 +21,25 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pulsemusic.player.data.AudioFolder
 import com.pulsemusic.player.data.AudioTrack
+import com.pulsemusic.player.ui.ClipboardMode
+import com.pulsemusic.player.ui.FileClipboard
 import com.pulsemusic.player.ui.components.TrackListRow
 import com.pulsemusic.player.ui.theme.PulseBg
 import com.pulsemusic.player.ui.theme.PulseCyan
@@ -56,14 +65,21 @@ fun FoldersScreen(
     selectedFolder: AudioFolder?,
     currentTrackId: Long?,
     favoriteIds: Set<Long>,
+    clipboard: FileClipboard?,
     isScanning: Boolean,
     loadAlbumArt: suspend (AudioTrack) -> Bitmap?,
     onSelectFolder: (AudioFolder?) -> Unit,
     onPlayTracks: (List<AudioTrack>, Int) -> Unit,
     onToggleFavorite: (Long) -> Unit,
-    onAddToPlaylist: (AudioTrack) -> Unit,
+    onOpenSongOptions: (AudioTrack) -> Unit,
+    onPasteHere: (AudioFolder) -> Unit,
+    onClearClipboard: () -> Unit,
     onRescanStorage: () -> Unit
 ) {
+    // Inside Folders, default tap opens the full Song Options sheet (Play / Edit / Rename / Copy / Cut / Move / Delete)
+    // and user can toggle to instant Play anytime.
+    var tapOpensMenu by remember { mutableStateOf(true) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -108,6 +124,15 @@ fun FoldersScreen(
                 }
             }
 
+            if (clipboard != null) {
+                ClipboardBanner(
+                    clipboard = clipboard,
+                    canPasteHere = false,
+                    onPaste = {},
+                    onCancel = onClearClipboard
+                )
+            }
+
             if (folders.isEmpty() && !isScanning) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -138,7 +163,7 @@ fun FoldersScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { onSelectFolder(null) }) {
@@ -165,6 +190,25 @@ fun FoldersScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                FilterChip(
+                    selected = tapOpensMenu,
+                    onClick = { tapOpensMenu = !tapOpensMenu },
+                    label = {
+                        Text(
+                            text = if (tapOpensMenu) "Tap: Menu" else "Tap: Play",
+                            fontSize = 11.sp
+                        )
+                    }
+                )
+            }
+
+            if (clipboard != null) {
+                ClipboardBanner(
+                    clipboard = clipboard,
+                    canPasteHere = true,
+                    onPaste = { onPasteHere(selectedFolder) },
+                    onCancel = onClearClipboard
+                )
             }
 
             Row(
@@ -209,11 +253,65 @@ fun FoldersScreen(
                         isFavorite = track.id in favoriteIds,
                         loadAlbumArt = loadAlbumArt,
                         onToggleFavorite = { onToggleFavorite(track.id) },
-                        onAddToPlaylist = { onAddToPlaylist(track) },
-                        onClick = { onPlayTracks(selectedFolder.tracks, index) }
+                        onMoreOptions = { onOpenSongOptions(track) },
+                        onClick = {
+                            if (tapOpensMenu) {
+                                onOpenSongOptions(track)
+                            } else {
+                                onPlayTracks(selectedFolder.tracks, index)
+                            }
+                        }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ClipboardBanner(
+    clipboard: FileClipboard,
+    canPasteHere: Boolean,
+    onPaste: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF17253B))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.ContentPaste, contentDescription = null, tint = PulseCyan, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (clipboard.mode == ClipboardMode.CUT) "Ready to Move (Cut)" else "Ready to Copy",
+                color = PulseCyan,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = if (canPasteHere) clipboard.track.title else "Open target folder to paste '${clipboard.track.title}'",
+                color = Color.White,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (canPasteHere) {
+            Button(
+                onClick = onPaste,
+                colors = ButtonDefaults.buttonColors(containerColor = PulseCyan, contentColor = Color.Black),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text("Paste Here", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        IconButton(onClick = onCancel, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
         }
     }
 }
