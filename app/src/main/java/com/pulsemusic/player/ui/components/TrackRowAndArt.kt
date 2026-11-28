@@ -92,6 +92,7 @@ fun TrackListRow(
     track: AudioTrack,
     isCurrent: Boolean,
     isFavorite: Boolean = false,
+    subtitleExtra: String? = null,
     loadAlbumArt: suspend (AudioTrack) -> Bitmap?,
     onToggleFavorite: (() -> Unit)? = null,
     onMoreOptions: (() -> Unit)? = null,
@@ -125,9 +126,14 @@ fun TrackListRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            val subText = if (subtitleExtra != null) {
+                "${track.artist} • $subtitleExtra"
+            } else {
+                "${track.artist} • ${track.formattedDuration()}"
+            }
             Text(
-                text = "${track.artist} • ${track.formattedDuration()}",
-                color = Color(0xFF94A3B8),
+                text = subText,
+                color = if (subtitleExtra != null) PulsePink else Color(0xFF94A3B8),
                 fontSize = 11.5.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -135,12 +141,8 @@ fun TrackListRow(
         }
 
         if (isCurrent) {
-            Icon(
-                imageVector = Icons.Default.GraphicEq,
-                contentDescription = "Playing",
-                tint = PulsePink,
-                modifier = Modifier.size(18.dp)
-            )
+            MiniEqualizerIndicator(isPlaying = true, tint = PulsePink)
+            Spacer(modifier = Modifier.width(6.dp))
         }
 
         if (onToggleFavorite != null) {

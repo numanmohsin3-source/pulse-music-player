@@ -19,6 +19,25 @@ data class AudioTrack(
 ) {
     fun formattedDuration(): String = formatMillis(durationMs)
 
+    fun daysAgo(): Long {
+        if (dateAddedSec <= 0L) return 0L
+        val nowSec = System.currentTimeMillis() / 1000L
+        return ((nowSec - dateAddedSec) / (24 * 3600L)).coerceAtLeast(0L)
+    }
+
+    fun relativeTimeAgo(): String {
+        if (dateAddedSec <= 0L) return "Recently"
+        val d = daysAgo()
+        return when {
+            d == 0L -> "Today"
+            d == 1L -> "1 day ago"
+            d < 30L -> "$d days ago"
+            d < 60L -> "${d} days ago"
+            d < 365L -> "${d / 30} months ago"
+            else -> "${d / 365} year ago"
+        }
+    }
+
     companion object {
         fun formatMillis(ms: Long): String {
             val totalSec = (ms / 1000L).coerceAtLeast(0L)

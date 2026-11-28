@@ -17,7 +17,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Sort
+import com.pulsemusic.player.ui.components.AlphabetIndexerBar
+import com.pulsemusic.player.ui.components.SortSelectionDialog
+import com.pulsemusic.player.ui.components.TrackSortOrder
+import com.pulsemusic.player.ui.components.sortedByOrder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -160,6 +165,14 @@ fun FoldersScreen(
             }
         } else {
             // Inside a selected folder
+            var currentOrder by remember { mutableStateOf(TrackSortOrder.NAME_AZ) }
+            var showSortDialog by remember { mutableStateOf(false) }
+            val folderListState = rememberLazyListState()
+
+            val sortedTracks = remember(selectedFolder.tracks, currentOrder) {
+                selectedFolder.tracks.sortedByOrder(currentOrder)
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -183,19 +196,29 @@ fun FoldersScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${selectedFolder.tracks.size} songs • ${selectedFolder.displaySubPath}",
+                        text = "${sortedTracks.size} songs • ${currentOrder.label}",
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                // Sort button
+                IconButton(onClick = { showSortDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Sort,
+                        contentDescription = "Sort Songs",
+                        tint = PulseCyan
+                    )
+                }
+
                 FilterChip(
                     selected = tapOpensMenu,
                     onClick = { tapOpensMenu = !tapOpensMenu },
                     label = {
                         Text(
-                            text = if (tapOpensMenu) "Tap: Menu" else "Tap: Play",
+                            text = if (tapOpensMenu) "Menu" else "Play",
                             fontSize = 11.sp
                         )
                     }
@@ -218,7 +241,7 @@ fun FoldersScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { onPlayTracks(selectedFolder.tracks, 0) },
+                    onClick = { onPlayTracks(sortedTracks, 0) },
                     colors = ButtonDefaults.buttonColors(containerColor = PulsePink),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -228,7 +251,7 @@ fun FoldersScreen(
                 }
                 OutlinedButton(
                     onClick = {
-                        val shuffled = selectedFolder.tracks.shuffled()
+                        val shuffled = sortedTracks.shuffled()
                         onPlayTracks(shuffled, 0)
                     },
                     modifier = Modifier.weight(1f)
@@ -241,28 +264,46 @@ fun FoldersScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 92.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(selectedFolder.tracks, key = { _, t -> t.id }) { index, track ->
-                    TrackListRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        isFavorite = track.id in favoriteIds,
-                        loadAlbumArt = loadAlbumArt,
-                        onToggleFavorite = { onToggleFavorite(track.id) },
-                        onMoreOptions = { onOpenSongOptions(track) },
-                        onClick = {
-                            if (tapOpensMenu) {
-                                onOpenSongOptions(track)
-                            } else {
-                                onPlayTracks(selectedFolder.tracks, index)
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = folderListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 14.dp, end = 26.dp, bottom = 92.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(sortedTracks, key = { _, t -> t.id }) { index, track ->
+                        TrackListRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            isFavorite = track.id in favoriteIds,
+                            loadAlbumArt = loadAlbumArt,
+                            onToggleFavorite = { onToggleFavorite(track.id) },
+                            onMoreOptions = { onOpenSongOptions(track) },
+                            onClick = {
+                                if (tapOpensMenu) {
+                                    onOpenSongOptions(track)
+                                } else {
+                                    onPlayTracks(sortedTracks, index)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
+
+                // Vertical A to Z alphabet indexer (# to Z)
+                AlphabetIndexerBar(
+                    tracks = sortedTracks,
+                    listState = folderListState,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
+            }
+
+            if (showSortDialog) {
+                SortSelectionDialog(
+                    currentOrder = currentOrder,
+                    onSelectOrder = { currentOrder = it },
+                    onDismiss = { showSortDialog = false }
+                )
             }
         }
     }

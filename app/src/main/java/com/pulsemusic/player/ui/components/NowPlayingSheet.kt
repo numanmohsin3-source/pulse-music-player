@@ -1,7 +1,15 @@
 package com.pulsemusic.player.ui.components
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +113,11 @@ fun MiniPlayerBar(
                 )
             }
 
+            if (isPlaying) {
+                MiniEqualizerIndicator(isPlaying = true, tint = PulsePink)
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
             IconButton(onClick = onTogglePlayPause) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -155,6 +169,26 @@ fun NowPlayingDialog(
     onOpenEqualizer: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "vinyl_fx")
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "spin"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow"
+    )
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -196,13 +230,76 @@ fun NowPlayingDialog(
                 }
             }
 
-            // Artwork
-            TrackArtwork(
-                track = track,
-                loadAlbumArt = loadAlbumArt,
-                size = 250.dp,
-                cornerRadius = 22.dp
-            )
+            // Premium Vinyl Turntable Display with Ambient Glow & Continuous Rotation
+            Box(
+                modifier = Modifier.size(250.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Ambient breathing glow halo
+                Box(
+                    modifier = Modifier
+                        .size(240.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    PulsePink.copy(alpha = if (isPlaying) glowAlpha else 0.2f),
+                                    PulseCyan.copy(alpha = if (isPlaying) glowAlpha * 0.4f else 0.1f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+
+                // Outer Vinyl Record Disc
+                Box(
+                    modifier = Modifier
+                        .size(230.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF0F172A))
+                        .border(3.dp, Color(0xFF1E293B), CircleShape)
+                        .border(1.dp, Color(0x33FFFFFF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Grooves
+                    Box(
+                        modifier = Modifier
+                            .size(190.dp)
+                            .border(1.dp, Color(0x1AFFFFFF), CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(165.dp)
+                            .border(1.dp, Color(0x1AFFFFFF), CircleShape)
+                    )
+
+                    // Center spinning album artwork
+                    Box(
+                        modifier = Modifier
+                            .size(140.dp)
+                            .rotate(if (isPlaying) rotationAngle else 0f)
+                            .clip(CircleShape)
+                            .border(2.dp, PulseCyan, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        TrackArtwork(
+                            track = track,
+                            loadAlbumArt = loadAlbumArt,
+                            size = 140.dp,
+                            cornerRadius = 70.dp
+                        )
+
+                        // Center metallic spindle hole
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF0F172A))
+                                .border(2.dp, Color(0xFF94A3B8), CircleShape)
+                        )
+                    }
+                }
+            }
 
             // Title & artist + EQ chip
             Column(
@@ -260,6 +357,14 @@ fun NowPlayingDialog(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Animated Dynamic Equalizer Waveform
+                AnimatedEqualizerWave(
+                    isPlaying = isPlaying,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
             }
 
             // Seek bar

@@ -18,7 +18,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import com.pulsemusic.player.ui.components.AlphabetIndexerBar
+import com.pulsemusic.player.ui.components.SortSelectionDialog
+import com.pulsemusic.player.ui.components.TrackSortOrder
+import com.pulsemusic.player.ui.components.sortedByOrder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -105,6 +113,7 @@ fun LibraryHubScreen(
         ListDetailView(
             title = selectedSmartList.title,
             tracks = listTracks,
+            isRecentlyAdded = selectedSmartList == SmartListType.RECENTLY_ADDED,
             currentTrackId = currentTrackId,
             favoriteIds = favoriteIds,
             loadAlbumArt = loadAlbumArt,
@@ -121,6 +130,7 @@ fun LibraryHubScreen(
         ListDetailView(
             title = activePlaylist.name,
             tracks = listTracks,
+            isRecentlyAdded = false,
             currentTrackId = currentTrackId,
             favoriteIds = favoriteIds,
             loadAlbumArt = loadAlbumArt,
@@ -369,6 +379,7 @@ private fun SmartListRow(
 private fun ListDetailView(
     title: String,
     tracks: List<AudioTrack>,
+    isRecentlyAdded: Boolean = false,
     currentTrackId: Long?,
     favoriteIds: Set<Long>,
     loadAlbumArt: suspend (AudioTrack) -> Bitmap?,
@@ -378,6 +389,23 @@ private fun ListDetailView(
     onOpenSongOptions: (AudioTrack) -> Unit,
     onRemoveFromList: ((Long) -> Unit)?
 ) {
+    var selectedDayFilter by remember { mutableStateOf<Long?>(null) }
+    var currentSortOrder by remember {
+        mutableStateOf(if (isRecentlyAdded) TrackSortOrder.DATE_NEWEST else TrackSortOrder.NAME_AZ)
+    }
+    var showSortDialog by remember { mutableStateOf(false) }
+    val detailListState = rememberLazyListState()
+
+    // Day filter for Recently Added: e.g. 7, 30, 40, 60 days
+    val filteredByDays = remember(tracks, selectedDayFilter, isRecentlyAdded) {
+        if (!isRecentlyAdded || selectedDayFilter == null) tracks
+        else tracks.filter { it.daysAgo() <= selectedDayFilter!! }
+    }
+
+    val sortedTracks = remember(filteredByDays, currentSortOrder) {
+        filteredByDays.sortedByOrder(currentSortOrder)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -400,14 +428,56 @@ private fun ListDetailView(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${tracks.size} songs",
+                    text = "${sortedTracks.size} songs • ${currentSortOrder.label}",
                     color = Color(0xFF94A3B8),
-                    fontSize = 12.sp
+                    fontSize = 11.5.sp
                 )
+            }
+            IconButton(onClick = { showSortDialog = true }) {
+                Icon(Icons.Default.Sort, contentDescription = "Sort", tint = PulseCyan)
             }
         }
 
-        if (tracks.isNotEmpty()) {
+        // Recently Added Day Filter Buttons (All, 7 Days, 30 Days, 40 Days, 60 Days)
+        if (isRecentlyAdded) {
+            val dayOptions = listOf(
+                null to "All",
+                7L to "7 Days Ago",
+                30L to "30 Days Ago",
+                40L to "40 Days Ago",
+                60L to "60 Days Ago"
+            )
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(dayOptions) { (days, label) ->
+                    val isSelected = selectedDayFilter == days
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedDayFilter = days },
+                        label = {
+                            Text(
+                                text = label,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PulsePink,
+                            selectedLabelColor = Color.White,
+                            containerColor = PulseSurface,
+                            labelColor = Color(0xFFCBD5E1)
+                        )
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        if (sortedTracks.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -415,7 +485,7 @@ private fun ListDetailView(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { onPlayTracks(tracks, 0) },
+                    onClick = { onPlayTracks(sortedTracks, 0) },
                     colors = ButtonDefaults.buttonColors(containerColor = PulsePink),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -424,7 +494,7 @@ private fun ListDetailView(
                     Text("Play All", fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
-                    onClick = { onPlayTracks(tracks.shuffled(), 0) },
+                    onClick = { onPlayTracks(sortedTracks.shuffled(), 0) },
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Shuffle, contentDescription = null, tint = PulseCyan, modifier = Modifier.size(18.dp))
@@ -436,48 +506,74 @@ private fun ListDetailView(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        if (tracks.isEmpty()) {
+        if (sortedTracks.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No songs in $title yet.", color = Color(0xFF94A3B8), fontSize = 14.sp)
+                Text(
+                    text = if (isRecentlyAdded && selectedDayFilter != null)
+                        "No songs added within the last ${selectedDayFilter} days."
+                    else
+                        "No songs in $title yet.",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 14.sp
+                )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 92.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(tracks, key = { idx, t -> "${t.id}_$idx" }) { index, track ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            TrackListRow(
-                                track = track,
-                                isCurrent = track.id == currentTrackId,
-                                isFavorite = track.id in favoriteIds,
-                                loadAlbumArt = loadAlbumArt,
-                                onToggleFavorite = { onToggleFavorite(track.id) },
-                                onMoreOptions = if (onRemoveFromList == null) {
-                                    { onOpenSongOptions(track) }
-                                } else null,
-                                onClick = { onPlayTracks(tracks, index) }
-                            )
-                        }
-                        if (onRemoveFromList != null) {
-                            IconButton(onClick = { onRemoveFromList(track.id) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Remove from playlist",
-                                    tint = Color(0xFF94A3B8),
-                                    modifier = Modifier.size(20.dp)
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = detailListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 14.dp, end = 26.dp, bottom = 92.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(sortedTracks, key = { idx, t -> "${t.id}_$idx" }) { index, track ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                TrackListRow(
+                                    track = track,
+                                    isCurrent = track.id == currentTrackId,
+                                    isFavorite = track.id in favoriteIds,
+                                    subtitleExtra = if (isRecentlyAdded) track.relativeTimeAgo() else null,
+                                    loadAlbumArt = loadAlbumArt,
+                                    onToggleFavorite = { onToggleFavorite(track.id) },
+                                    onMoreOptions = if (onRemoveFromList == null) {
+                                        { onOpenSongOptions(track) }
+                                    } else null,
+                                    onClick = { onPlayTracks(sortedTracks, index) }
                                 )
+                            }
+                            if (onRemoveFromList != null) {
+                                IconButton(onClick = { onRemoveFromList(track.id) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Remove from playlist",
+                                        tint = Color(0xFF94A3B8),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
+
+                // Vertical A-Z indexer
+                AlphabetIndexerBar(
+                    tracks = sortedTracks,
+                    listState = detailListState,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
             }
         }
+    }
+
+    if (showSortDialog) {
+        SortSelectionDialog(
+            currentOrder = currentSortOrder,
+            onSelectOrder = { currentSortOrder = it },
+            onDismiss = { showSortDialog = false }
+        )
     }
 }
 

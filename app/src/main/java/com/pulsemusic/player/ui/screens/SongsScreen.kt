@@ -13,7 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.pulsemusic.player.ui.components.AlphabetIndexerBar
+import com.pulsemusic.player.ui.components.SortSelectionDialog
+import com.pulsemusic.player.ui.components.TrackSortOrder
+import com.pulsemusic.player.ui.components.sortedByOrder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -61,6 +69,14 @@ fun SongsScreen(
         }
     }
 
+    var sortOrder by remember { mutableStateOf(TrackSortOrder.NAME_AZ) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    val songsListState = rememberLazyListState()
+
+    val sortedTracks = remember(filtered, sortOrder) {
+        filtered.sortedByOrder(sortOrder)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,7 +89,7 @@ fun SongsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "All Songs",
                     color = Color.White,
@@ -81,13 +97,18 @@ fun SongsScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${filtered.size} audio tracks",
+                    text = "${sortedTracks.size} tracks • ${sortOrder.label}",
                     color = Color(0xFF94A3B8),
-                    fontSize = 12.sp
+                    fontSize = 11.5.sp
                 )
             }
-            IconButton(onClick = onRescanStorage) {
-                Icon(Icons.Default.Refresh, contentDescription = "Rescan", tint = PulseCyan)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { showSortDialog = true }) {
+                    Icon(Icons.Default.Sort, contentDescription = "Sort", tint = PulseCyan)
+                }
+                IconButton(onClick = onRescanStorage) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Rescan", tint = Color.White)
+                }
             }
         }
 
@@ -112,7 +133,7 @@ fun SongsScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        if (filtered.isEmpty()) {
+        if (sortedTracks.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -124,23 +145,41 @@ fun SongsScreen(
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 92.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(filtered, key = { _, t -> t.id }) { index, track ->
-                    TrackListRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        isFavorite = track.id in favoriteIds,
-                        loadAlbumArt = loadAlbumArt,
-                        onToggleFavorite = { onToggleFavorite(track.id) },
-                        onMoreOptions = { onOpenSongOptions(track) },
-                        onClick = { onPlayTracks(filtered, index) }
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = songsListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 14.dp, end = 26.dp, bottom = 92.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(sortedTracks, key = { _, t -> t.id }) { index, track ->
+                        TrackListRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            isFavorite = track.id in favoriteIds,
+                            loadAlbumArt = loadAlbumArt,
+                            onToggleFavorite = { onToggleFavorite(track.id) },
+                            onMoreOptions = { onOpenSongOptions(track) },
+                            onClick = { onPlayTracks(sortedTracks, index) }
+                        )
+                    }
                 }
+
+                // Vertical A to Z indexer
+                AlphabetIndexerBar(
+                    tracks = sortedTracks,
+                    listState = songsListState,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
             }
         }
+    }
+
+    if (showSortDialog) {
+        SortSelectionDialog(
+            currentOrder = sortOrder,
+            onSelectOrder = { sortOrder = it },
+            onDismiss = { showSortDialog = false }
+        )
     }
 }
