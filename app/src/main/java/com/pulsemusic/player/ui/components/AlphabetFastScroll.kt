@@ -77,8 +77,8 @@ fun List<AudioFolder>.sortedByFolderOrder(order: FolderSortOrder): List<AudioFol
     return when (order) {
         FolderSortOrder.NAME_AZ -> sortedBy { it.folderName.lowercase() }
         FolderSortOrder.NAME_ZA -> sortedByDescending { it.folderName.lowercase() }
-        FolderSortOrder.SONGS_DESC -> sortedByDescending { it.songCount }
-        FolderSortOrder.SONGS_ASC -> sortedBy { it.songCount }
+        FolderSortOrder.SONGS_DESC -> sortedByDescending { it.tracks.size }
+        FolderSortOrder.SONGS_ASC -> sortedBy { it.tracks.size }
     }
 }
 
