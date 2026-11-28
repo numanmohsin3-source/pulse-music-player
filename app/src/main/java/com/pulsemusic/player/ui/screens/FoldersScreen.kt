@@ -21,8 +21,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.Sort
 import com.pulsemusic.player.ui.components.AlphabetIndexerBar
+import com.pulsemusic.player.ui.components.FolderSortOrder
+import com.pulsemusic.player.ui.components.FolderSortSelectionDialog
 import com.pulsemusic.player.ui.components.SortSelectionDialog
 import com.pulsemusic.player.ui.components.TrackSortOrder
+import com.pulsemusic.player.ui.components.sortedByFolderOrder
 import com.pulsemusic.player.ui.components.sortedByOrder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -82,10 +85,6 @@ fun FoldersScreen(
     onClearClipboard: () -> Unit,
     onRescanStorage: () -> Unit
 ) {
-    // Inside Folders, default tap opens the full Song Options sheet (Play / Edit / Rename / Copy / Cut / Move / Delete)
-    // and user can toggle to instant Play anytime.
-    var tapOpensMenu by remember { mutableStateOf(true) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -100,6 +99,13 @@ fun FoldersScreen(
         }
 
         if (selectedFolder == null) {
+            var folderSortOrder by remember { mutableStateOf(FolderSortOrder.NAME_AZ) }
+            var showFolderSortDialog by remember { mutableStateOf(false) }
+
+            val sortedFolders = remember(folders, folderSortOrder) {
+                folders.sortedByFolderOrder(folderSortOrder)
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -107,7 +113,7 @@ fun FoldersScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Music Folders",
                         color = Color.White,
@@ -115,18 +121,27 @@ fun FoldersScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${folders.size} folders on device storage",
+                        text = "${sortedFolders.size} folders • ${folderSortOrder.label}",
                         color = Color(0xFF94A3B8),
-                        fontSize = 12.sp
+                        fontSize = 11.5.sp
                     )
                 }
 
-                IconButton(onClick = onRescanStorage) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Rescan Storage",
-                        tint = PulseCyan
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showFolderSortDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Sort,
+                            contentDescription = "Sort Folders",
+                            tint = PulseCyan
+                        )
+                    }
+                    IconButton(onClick = onRescanStorage) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Rescan Storage",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
 
@@ -139,7 +154,7 @@ fun FoldersScreen(
                 )
             }
 
-            if (folders.isEmpty() && !isScanning) {
+            if (sortedFolders.isEmpty() && !isScanning) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -156,13 +171,21 @@ fun FoldersScreen(
                     contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 92.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(folders, key = { it.folderPath }) { folder ->
+                    items(sortedFolders, key = { it.folderPath }) { folder ->
                         FolderRowCard(
                             folder = folder,
                             onClick = { onSelectFolder(folder) }
                         )
                     }
                 }
+            }
+
+            if (showFolderSortDialog) {
+                FolderSortSelectionDialog(
+                    currentOrder = folderSortOrder,
+                    onSelectOrder = { folderSortOrder = it },
+                    onDismiss = { showFolderSortDialog = false }
+                )
             }
         } else {
             // Inside a selected folder
@@ -213,17 +236,6 @@ fun FoldersScreen(
                         tint = PulseCyan
                     )
                 }
-
-                FilterChip(
-                    selected = tapOpensMenu,
-                    onClick = { tapOpensMenu = !tapOpensMenu },
-                    label = {
-                        Text(
-                            text = if (tapOpensMenu) "Menu" else "Play",
-                            fontSize = 11.sp
-                        )
-                    }
-                )
             }
 
             if (clipboard != null) {
@@ -280,13 +292,7 @@ fun FoldersScreen(
                             loadAlbumArt = loadAlbumArt,
                             onToggleFavorite = { onToggleFavorite(track.id) },
                             onMoreOptions = { onOpenSongOptions(track) },
-                            onClick = {
-                                if (tapOpensMenu) {
-                                    onOpenSongOptions(track)
-                                } else {
-                                    onPlayTracks(sortedTracks, index)
-                                }
-                            }
+                            onClick = { onPlayTracks(sortedTracks, index) }
                         )
                     }
                 }

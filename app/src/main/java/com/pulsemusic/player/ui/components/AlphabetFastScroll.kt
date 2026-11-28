@@ -47,6 +47,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pulsemusic.player.data.AudioFolder
 import com.pulsemusic.player.data.AudioTrack
 import com.pulsemusic.player.ui.theme.PulseCyan
 import com.pulsemusic.player.ui.theme.PulsePink
@@ -63,6 +64,22 @@ enum class TrackSortOrder(val label: String) {
     DURATION_DESC("Duration (Longest)"),
     DURATION_ASC("Duration (Shortest)"),
     ARTIST_AZ("Artist (A → Z)")
+}
+
+enum class FolderSortOrder(val label: String) {
+    NAME_AZ("Folder Name (A → Z)"),
+    NAME_ZA("Folder Name (Z → A)"),
+    SONGS_DESC("Most Songs First"),
+    SONGS_ASC("Least Songs First")
+}
+
+fun List<AudioFolder>.sortedByFolderOrder(order: FolderSortOrder): List<AudioFolder> {
+    return when (order) {
+        FolderSortOrder.NAME_AZ -> sortedBy { it.folderName.lowercase() }
+        FolderSortOrder.NAME_ZA -> sortedByDescending { it.folderName.lowercase() }
+        FolderSortOrder.SONGS_DESC -> sortedByDescending { it.songCount }
+        FolderSortOrder.SONGS_ASC -> sortedBy { it.songCount }
+    }
 }
 
 fun List<AudioTrack>.sortedByOrder(order: TrackSortOrder): List<AudioTrack> {
@@ -209,6 +226,63 @@ fun SortSelectionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TrackSortOrder.values().forEach { order ->
+                    val isSelected = order == currentOrder
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) PulseSurfaceAlt else Color.Transparent)
+                            .clickable {
+                                onSelectOrder(order)
+                                onDismiss()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = order.label,
+                            color = if (isSelected) PulseCyan else Color.White,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 14.sp
+                        )
+                        if (isSelected) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = PulseCyan, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = PulsePink)
+            }
+        },
+        containerColor = Color(0xFF0F172A)
+    )
+}
+
+/**
+ * Sort selector dialog for folders.
+ */
+@Composable
+fun FolderSortSelectionDialog(
+    currentOrder: FolderSortOrder,
+    onSelectOrder: (FolderSortOrder) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Sort, contentDescription = null, tint = PulseCyan)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sort Folders By", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FolderSortOrder.values().forEach { order ->
                     val isSelected = order == currentOrder
                     Row(
                         modifier = Modifier

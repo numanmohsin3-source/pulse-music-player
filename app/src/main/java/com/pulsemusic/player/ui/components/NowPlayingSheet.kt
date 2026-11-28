@@ -11,6 +11,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -193,13 +197,19 @@ fun NowPlayingDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF141E30), PulseBg)))
-                .padding(horizontal = 22.dp, vertical = 18.dp),
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -232,15 +242,17 @@ fun NowPlayingDialog(
                 }
             }
 
+            Spacer(modifier = Modifier.height(4.dp))
+
             // Premium Vinyl Turntable Display with Ambient Glow & Continuous Rotation
             Box(
-                modifier = Modifier.size(250.dp),
+                modifier = Modifier.size(210.dp),
                 contentAlignment = Alignment.Center
             ) {
                 // Ambient breathing glow halo
                 Box(
                     modifier = Modifier
-                        .size(240.dp)
+                        .size(200.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
@@ -256,7 +268,7 @@ fun NowPlayingDialog(
                 // Outer Vinyl Record Disc
                 Box(
                     modifier = Modifier
-                        .size(230.dp)
+                        .size(192.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF0F172A))
                         .border(3.dp, Color(0xFF1E293B), CircleShape)
@@ -266,19 +278,19 @@ fun NowPlayingDialog(
                     // Grooves
                     Box(
                         modifier = Modifier
-                            .size(190.dp)
+                            .size(160.dp)
                             .border(1.dp, Color(0x1AFFFFFF), CircleShape)
                     )
                     Box(
                         modifier = Modifier
-                            .size(165.dp)
+                            .size(138.dp)
                             .border(1.dp, Color(0x1AFFFFFF), CircleShape)
                     )
 
                     // Center spinning album artwork
                     Box(
                         modifier = Modifier
-                            .size(140.dp)
+                            .size(118.dp)
                             .rotate(if (isPlaying) rotationAngle else 0f)
                             .clip(CircleShape)
                             .border(2.dp, PulseCyan, CircleShape),
@@ -287,14 +299,14 @@ fun NowPlayingDialog(
                         TrackArtwork(
                             track = track,
                             loadAlbumArt = loadAlbumArt,
-                            size = 140.dp,
-                            cornerRadius = 70.dp
+                            size = 118.dp,
+                            cornerRadius = 59.dp
                         )
 
                         // Center metallic spindle hole
                         Box(
                             modifier = Modifier
-                                .size(20.dp)
+                                .size(18.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF0F172A))
                                 .border(2.dp, Color(0xFF94A3B8), CircleShape)
@@ -463,6 +475,8 @@ fun NowPlayingDialog(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
         }
     }
 }

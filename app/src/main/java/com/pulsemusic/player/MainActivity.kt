@@ -159,7 +159,8 @@ class MainActivity : ComponentActivity() {
             DisposableEffect(lifecycleOwner, hasAudioPerm) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME && hasAudioPerm) {
-                        viewModel.rescanStorage(onlyRecent = true)
+                        viewModel.scanLibrary()
+                        viewModel.rescanStorage(onlyRecent = false)
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
