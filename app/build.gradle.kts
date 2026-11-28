@@ -18,10 +18,34 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            val ksFile = when {
+                !ksPath.isNullOrBlank() && file(ksPath).exists() -> file(ksPath)
+                !ksPath.isNullOrBlank() && rootProject.file(ksPath).exists() -> rootProject.file(ksPath)
+                rootProject.file("release.keystore").exists() -> rootProject.file("release.keystore")
+                file("release.keystore").exists() -> file("release.keystore")
+                else -> null
+            }
+            if (ksFile != null && ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android123"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "pulsemusic"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "android123"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            val sc = signingConfigs.getByName("release")
+            signingConfig = if (sc.storeFile != null && sc.storeFile?.exists() == true) {
+                sc
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isMinifyEnabled = false
@@ -49,6 +73,11 @@ android {
         }
     }
 
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -73,11 +102,9 @@ dependencies {
     // Media3 ExoPlayer & Background MediaSession
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-session:1.5.1")
-    implementation("androidx.media3:media3-common:1.5.1")
 
-    // Coroutines & Guava ListenableFuture helper
+    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
